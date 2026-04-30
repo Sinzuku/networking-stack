@@ -4,6 +4,8 @@ const { Server } = require('socket.io');
 const WebSocket = require('ws');
 const path = require('path');
 const admin = require('firebase-admin');
+
+console.log('ENV CHECK:', process.env.FIREBASE_SERVICE_ACCOUNT ? 'found' : 'undefined');
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
