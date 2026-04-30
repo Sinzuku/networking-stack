@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Display</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      background: #111; color: #fff; 
+      font-family: sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh; padding: 40px;
+      text-align: center;
+    }
+    h1 { font-size: 48px; margin-bottom: 20px; color: #4a90e2; }
+    .statement { font-size: 36px; margin-bottom: 20px; color: #fff; min-height: 60px; }
+    .progress { font-size: 20px; color: #aaa; margin-bottom: 20px; }
+    .congrats { font-size: 32px; color: #2ecc71; display: none; }
+    .idle { font-size: 24px; color: #aaa; }
+    .url { font-size: 18px; color: #4a90e2; margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <div id="idle-state">
+    <div class="idle">Use the URL to control</div>
+    <div class="url" id="controllerUrl"></div>
+  </div>
+
+  <div id="active-state" style="display:none">
+    <h1 id="welcomeMsg">Welcome</h1>
+    <div class="statement" id="statementDisplay"></div>
+    <div class="progress" id="progressDisplay"></div>
+    <div class="congrats" id="congratsDisplay">
+      Congratulations! All 3 touchpoints visited!
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const touchpointId = 'touchpoint-3';
+
+    socket.emit('register-touchpoint', touchpointId);
+
+    // show controller url
+    document.getElementById('controllerUrl').textContent = 
+      window.location.host + '/controller.html?tp=' + touchpointId;
+
+    function showActive(data) {
+      document.getElementById('idle-state').style.display = 'none';
+      document.getElementById('active-state').style.display = 'block';
+      document.getElementById('welcomeMsg').textContent = 'Welcome ' + data.username;
+      document.getElementById('statementDisplay').textContent = data.fullStatement || '';
+      document.getElementById('progressDisplay').textContent = 
+        'Touchpoints visited: ' + data.visitCount + '/3';
+      
+      if (data.completed) {
+        document.getElementById('congratsDisplay').style.display = 'block';
+      }
+    }
+
+    socket.on('user-checkin', function(data) {
+      showActive(data);
+    });
+
+    socket.on('user-update', function(data) {
+      showActive(data);
+    });
+
+    socket.on('touchpoint-idle', function(){
+      document.getElementById('idle-state').style.display = 'block';
+      document.getElementById('active-state').style.display = 'none';
+      document.getElementById('congratsDisplay').style.display = 'none';
+    })
+  </script>
+</body>
+</html>

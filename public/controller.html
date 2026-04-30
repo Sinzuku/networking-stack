@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Controller</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: sans-serif; 
+      padding: 30px 20px; 
+      background: #111; 
+      color: #fff;
+      min-height: 100vh;
+    }
+    h2 { margin-bottom: 20px; font-size: 22px; }
+    p { margin-bottom: 16px; color: #aaa; font-size: 15px; }
+    input { 
+      width: 100%; padding: 14px; 
+      font-size: 16px; border: none; 
+      border-radius: 8px; margin-bottom: 12px;
+      background: #222; color: #fff;
+    }
+    button { 
+      width: 100%; padding: 14px; 
+      font-size: 16px; background: #4a90e2; 
+      color: white; border: none; border-radius: 8px; 
+      cursor: pointer; margin-bottom: 10px;
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .statement-display {
+      background: #222; border-radius: 8px;
+      padding: 16px; margin-bottom: 16px;
+      font-size: 18px; color: #4a90e2;
+      min-height: 60px;
+    }
+    .progress { color: #aaa; font-size: 13px; margin-bottom: 16px; }
+    .congrats { color: #2ecc71; font-size: 20px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+  <!-- screen 1: phone entry -->
+  <div id="screen-phone" class="screen active">
+    <h2>Welcome</h2>
+    <p>Enter your phone number to begin</p>
+    <input id="phoneInput" type="tel" placeholder="Phone number" />
+    <button id="phoneBtn">Continue</button>
+  </div>
+
+  <!-- screen 2: registration -->
+  <div id="screen-register" class="screen">
+    <h2>New User</h2>
+    <p>Choose a username to get started</p>
+    <input id="usernameInput" type="text" placeholder="Username" />
+    <button id="registerBtn">Register</button>
+  </div>
+
+  <!-- screen 3: statement input -->
+  <div id="screen-statement" class="screen">
+    <h2 id="welcomeMsg">Welcome</h2>
+    <div class="statement-display" id="currentStatement">...</div>
+    <div class="progress" id="progressMsg"></div>
+    <div class="congrats" id="congratsMsg" style="display:none">
+      Congratulations! You visited all 3 touchpoints!
+    </div>
+    <input id="statementInput" type="text" placeholder="Enter your word or statement" />
+    <button id="statementBtn">Submit</button>
+  </div>
+
+  <!-- screen 4: submitted -->
+  <div id="screen-submitted" class="screen">
+    <h2>Submitted!</h2>
+    <p>Your full statement so far:</p>
+    <div class="statement-display" id="submittedStatement"></div>
+    <div class="progress" id="submittedProgress"></div>
+    <div class="congrats" id="submittedCongrats" style="display:none">
+      Congratulations! You visited all 3 touchpoints!
+    </div>
+  </div>
+
+  <!-- screen 5: busy -->
+  <div id="screen-busy" class="screen">
+    <h2>Touchpoint Busy</h2>
+    <p id="busyMsg">Someone is currently using this touchpoint. Please wait.</p>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    // get touchpoint id from url parameter
+    const params = new URLSearchParams(window.location.search);
+    const touchpointId = params.get('tp');
+
+    if (!touchpointId) {
+      document.body.innerHTML = '<p style="color:red;padding:30px">No touchpoint ID in URL. Add ?tp=touchpoint-1</p>';
+    }
+
+    socket.emit('register-controller', touchpointId);
+
+    let currentPhone = '';
+    let currentUser = null;
+
+    // screen switcher
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    // populate statement screen with user data
+    function populateStatementScreen(userData) {
+      currentUser = userData;
+      document.getElementById('welcomeMsg').textContent = 'Welcome ' + userData.username;
+      
+      const fullStatement = userData.visitOrder
+        ? userData.visitOrder.map(id => userData.statements[id]).join(' ')
+        : '';
+      
+      document.getElementById('currentStatement').textContent = 
+        fullStatement || 'No statements yet';
+      document.getElementById('progressMsg').textContent = 
+        'Touchpoints visited: ' + (userData.visitOrder ? userData.visitOrder.length : 0) + '/3';
+      
+      if (userData.visitOrder && userData.visitOrder.length >= 3) {
+        document.getElementById('congratsMsg').style.display = 'block';
+      }
+
+      showScreen('screen-statement');
+    }
+
+    // phone submit
+    document.getElementById('phoneBtn').addEventListener('click', function() {
+      const phone = document.getElementById('phoneInput').value.trim();
+      if (!phone) return;
+      currentPhone = phone;
+      socket.emit('lookup-user', phone);
+    });
+
+    // register submit
+    document.getElementById('registerBtn').addEventListener('click', function() {
+      const username = document.getElementById('usernameInput').value.trim();
+      if (!username) return;
+      socket.emit('register-user', { 
+        phone: currentPhone, 
+        username,
+        touchpointId 
+      });
+    });
+
+    // statement submit
+    document.getElementById('statementBtn').addEventListener('click', function() {
+      const statement = document.getElementById('statementInput').value.trim();
+      if (!statement) return;
+      socket.emit('submit-statement', {
+        phone: currentPhone,
+        touchpointId,
+        statement
+      });
+    });
+
+    // server responses
+    socket.on('user-found', function(userData) {
+      populateStatementScreen(userData);
+    });
+
+    socket.on('user-not-found', function() {
+      showScreen('screen-register');
+    });
+
+    socket.on('user-registered', function(userData) {
+      populateStatementScreen(userData);
+    });
+
+    socket.on('statement-accepted', function(data) {
+      document.getElementById('submittedStatement').textContent = data.fullStatement;
+      document.getElementById('submittedProgress').textContent = 
+        'Touchpoints visited: ' + data.visitCount + '/3';
+      
+      if (data.completed) {
+        document.getElementById('submittedCongrats').style.display = 'block';
+      }
+      showScreen('screen-submitted');
+    });
+
+    socket.on('touchpoint-busy',function(){
+      showScreen('screen-busy');
+    });
+
+  </script>
+</body>
+</html>
